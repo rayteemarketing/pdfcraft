@@ -239,6 +239,40 @@ $pdfChecked = Read-Row 'SELECT `Value` FROM `CheckBox` WHERE `Property` = ''INST
 Assert-Equal $pdfChecked[0] '1' 'Welcome PDF context-menu value'
 Assert-NoRow 'SELECT `Registry` FROM `Registry` WHERE `Key` = ''Software\Classes\.pdf'' AND `Name` IS NULL' '.pdf default app'
 
+# "Combine files in PdfCraft…" (#585) lists the selected PDFs and images in the Combine files tab. One
+# verb name on .pdf and on every image type, so a selection mixing them gets it too. Each selected
+# file starts pdfcraft.exe --combine "%1", and the single-instance hand-off gathers them in one list;
+# Player keeps the entry for more than 15 files. It goes with the menu of its kind of file: the PDF
+# part with INSTALLPDFCONTEXTMENU, the image part with INSTALLIMAGECONTEXTMENU, each its own
+# component with the .pdf or .png label as key path, kept on update exactly when that menu is.
+foreach ($part in @(@('PdfcraftPdfCombineMenu', 'INSTALLPDFCONTEXTMENU', @('pdf')),
+                    @('PdfcraftImageCombineMenu', 'INSTALLIMAGECONTEXTMENU', @('png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'jp2', 'j2k', 'jpx')))) {
+  $component = $part[0]
+  foreach ($ext in $part[2]) {
+    $key = 'Software\Classes\SystemFileAssociations\.' + $ext + '\shell\PdfCraft.Combine'
+    $menu = Read-Row ('SELECT `Value`, `Component_`, `Root` FROM `Registry` WHERE `Key` = ''' + $key + ''' AND `Name` IS NULL') 3
+    Assert-Equal $menu[0] 'Combine files in PdfCraft…' "$ext combine menu label"
+    Assert-Equal $menu[1] $component "$ext combine menu component"
+    Assert-Equal $menu[2] '2' "$ext combine menu HKLM root"
+    foreach ($value in @(@('Icon', '"[#PdfcraftExe]",0'), @('MultiSelectModel', 'Player'))) {
+      $row = Read-Row ('SELECT `Value`, `Component_` FROM `Registry` WHERE `Key` = ''' + $key + ''' AND `Name` = ''' + $value[0] + '''') 2
+      Assert-Equal $row[0] $value[1] "$ext combine menu $($value[0])"
+      Assert-Equal $row[1] $component "$ext combine menu $($value[0]) component"
+    }
+    $command = Read-Row ('SELECT `Value`, `Component_` FROM `Registry` WHERE `Key` = ''' + $key + '\command''') 2
+    Assert-Equal $command[0] '"[#PdfcraftExe]" --combine "%1"' "$ext combine menu command"
+    Assert-Equal $command[1] $component "$ext combine menu command component"
+  }
+  $keyPath = Read-Row ('SELECT `Registry` FROM `Registry` WHERE `Key` = ''Software\Classes\SystemFileAssociations\.' + $part[2][0] + '\shell\PdfCraft.Combine'' AND `Name` IS NULL') 1
+  $row = Read-Row ('SELECT `Condition`, `KeyPath`, `Attributes` FROM `Component` WHERE `Component` = ''' + $component + '''') 3
+  Assert-Equal $row[0] "$($part[1]) = 1" "$component condition"
+  Assert-Equal $row[1] $keyPath[0] "$component key path"
+  # msidbComponentAttributesRegistryKeyPath (4).
+  if (([int] $row[2] -band 4) -eq 0) { throw "$component key path is not a registry value: attributes $($row[2])" }
+}
+Assert-KeptOnUpdate 'INSTALLPDFCONTEXTMENU' 'PDFCONTEXTMENURELEASE' 'EXISTINGPDFCONTEXTMENU' 'Edit with PdfCraft' 'PdfcraftPdfCombineMenu' 'PDF combine menu'
+Assert-KeptOnUpdate 'INSTALLIMAGECONTEXTMENU' 'IMAGECONTEXTMENURELEASE' 'EXISTINGIMAGECONTEXTMENU' 'Create PDF with PdfCraft…' 'PdfcraftImageCombineMenu' 'Image combine menu'
+
 # Negative sequences are Windows Installer's success/user-exit/failure paths. Only full UI
 # shows these dialogs: an unattended /qn or /qb install must never wait for a Finish click.
 foreach ($exit in @(@('InstallComplete', '-1'), @('InstallCancelled', '-2'), @('InstallFailed', '-3'))) {

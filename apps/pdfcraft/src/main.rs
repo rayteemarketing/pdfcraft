@@ -2,6 +2,10 @@
 //!
 //! Usage: `pdfcraft [options] [files…]`
 //! `--create-images [images…]` stages the images in one PDF and asks for the page DPI.
+//! `--combine [files…]` lists the files (PDFs, images, text files) in the Combine files tab instead
+//! of opening them. Like a launch that only names files, it hands them to the PdfCraft already
+//! running, where they join that tab's list (File Explorer's "Combine files in PdfCraft…" starts one
+//! such launch per selected file).
 //!
 //! View options (applied after the files open; also the seed of the UI control channel):
 //! `--page N  --zoom 150  --layout single|continuous|two-up|two-page  --continuous on|off  --panel comments|bookmarks|pages|fields|layers|attachments|none
@@ -191,6 +195,7 @@ fn main() -> eframe::Result {
     let mut options: Vec<(String, String)> = Vec::new();
     let mut control_file: Option<String> = None;
     let mut create_images = false;
+    let mut combine = false;
     let mut new_window = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -201,6 +206,7 @@ fn main() -> eframe::Result {
             }
             "--control" => control_file = args.next(),
             "--create-images" => create_images = true,
+            "--combine" => combine = true,
             "--new-window" => new_window = true,
             flag if flag.starts_with("--") => {
                 let value = args.next().unwrap_or_default();
@@ -228,19 +234,21 @@ fn main() -> eframe::Result {
     }
     // Windows, Linux and the BSDs: a launch that only names files (an Outlook attachment, an
     // Explorer double-click, a file manager or `xdg-open`) hands them to the PdfCraft already
-    // running and exits (#282, #317, #1726). Any option means the caller wants this launch's own
-    // window.
+    // running and exits (#282, #317, #1726). Any option but `--combine` means the caller wants this
+    // launch's own window; `--combine` files join the running app's Combine files list, so the
+    // launches File Explorer starts for one selection share one list.
     let may_hand_off = !new_window && !files.is_empty() && options.is_empty() && control_file.is_none() && !create_images;
     // Absolute for this instance too: links relative to a document resolve against its folder,
     // never the working directory.
     let files = single_instance::absolute(&files);
-    let instance = match single_instance::claim(&files, may_hand_off) {
+    let request = if combine { single_instance::Request::Combine(files.clone()) } else { single_instance::Request::Open(files.clone()) };
+    let instance = match single_instance::claim(&request, may_hand_off) {
         single_instance::Claim::HandedOff => return Ok(()),
         single_instance::Claim::Primary(server) => Some(server),
         single_instance::Claim::Alone => None,
     };
     let choice = renderer_choice(std::env::var("PDFCRAFT_RENDERER").ok().as_deref());
-    let launch = Launch { files, options, control_file, create_images, integrated, window_controls };
+    let launch = Launch { files, options, control_file, create_images, combine, integrated, window_controls };
     // Finder, Open With and the Dock deliver files as Apple events, not arguments; catch the one
     // that launched us as well as later ones. Lives until the event loop returns.
     #[cfg(target_os = "macos")]
@@ -344,6 +352,8 @@ struct Launch {
     options: Vec<(String, String)>,
     control_file: Option<String>,
     create_images: bool,
+    /// `--combine`: the files go to the Combine files tab.
+    combine: bool,
     integrated: bool,
     /// The window buttons the app draws, when the desktop leaves the frame to it.
     window_controls: Option<pdfcraft_ui_egui::window_controls::Layout>,
@@ -367,7 +377,7 @@ fn app_creator<'a>(
     instance: Option<&'a single_instance::Server>,
     #[cfg(target_os = "macos")] apple_events: &'a apple_events::AppleEvents,
 ) -> eframe::AppCreator<'a> {
-    let Launch { files, options, control_file, create_images, integrated, window_controls } = launch;
+    let Launch { files, options, control_file, create_images, combine, integrated, window_controls } = launch;
     Box::new(move |cc| {
         started.set(true);
         let mut app = PdfCraftApp::new();
@@ -440,6 +450,10 @@ fn app_creator<'a>(
             if let Err(e) = app.begin_image_import_paths(&files) {
                 app.notify(e);
             }
+        } else if combine {
+            // The Combine files tab lists this launch's files; those of the launches started with
+            // it (one per file selected in File Explorer) join the list as they are handed over.
+            app.combine_paths(&files);
         } else {
             // With the preference on, last session's files come back first; files named on
             // the command line open after them, in front (#442).

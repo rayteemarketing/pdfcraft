@@ -907,6 +907,38 @@ fn files_and_quit_from_the_operating_system() {
 }
 
 #[test]
+fn files_to_combine_from_the_operating_system_join_one_list() {
+    // File Explorer's "Combine files in PdfCraft…" starts one `--combine` launch per selected
+    // file; the running app gets their files in batches, which all join one Combine files list.
+    use pdfcraft_ui_egui::OsEvent;
+    let dir = std::env::temp_dir().join(format!("pdfcraft-os-combine-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::RgbImage::from_pixel(40, 20, image::Rgb([90, 120, 200])).write_to(&mut png, image::ImageFormat::Png).unwrap();
+    std::fs::write(dir.join("one.pdf"), FIXTURE).unwrap();
+    std::fs::write(dir.join("scan.png"), png.into_inner()).unwrap();
+    std::fs::write(dir.join("two.pdf"), FIXTURE).unwrap();
+    let path = |name: &str| dir.join(name).to_string_lossy().into_owned();
+    let queue = std::rc::Rc::new(std::cell::RefCell::new(vec![OsEvent::Combine(vec![path("one.pdf"), path("scan.png")])]));
+    let q = queue.clone();
+    let mut h = harness(move |app| app.os_events = Some(Box::new(move || q.borrow_mut().drain(..).collect())));
+    h.run_steps(2);
+    let names = |h: &Harness<'static, PdfCraftApp>| h.state().combine_draft.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
+    assert!(h.state().combine_showing(), "the Combine files tab shows");
+    assert!(h.state().views.is_empty(), "nothing opens as a tab");
+    assert_eq!(names(&h), ["one.pdf", "scan.png"]);
+    let scan = &h.state().combine_draft[1];
+    assert!(scan.bytes.starts_with(b"%PDF-") && scan.problem.is_none() && scan.pages == 1, "the image became a PDF");
+    // The next launch's file joins the same list while the tab is open.
+    queue.borrow_mut().push(OsEvent::Combine(vec![path("two.pdf")]));
+    h.run_steps(2);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(h.state().combine_showing());
+    assert_eq!(names(&h), ["one.pdf", "scan.png", "two.pdf"]);
+}
+
+#[test]
 fn default_workspace_mode_persists_and_tolerates_invalid_settings() {
     use pdfcraft_ui_egui::Mode;
     for mode in [Mode::AllTools, Mode::Read, Mode::Edit, Mode::Convert, Mode::Sign] {

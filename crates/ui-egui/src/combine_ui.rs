@@ -2531,6 +2531,18 @@ impl PdfCraftApp {
         let _ = recursive;
     }
 
+    /// Add files named by path to the Combine files list, as one undo step, and show it: the files
+    /// of a `pdfcraft --combine` launch, or of one handed to this window ([`crate::OsEvent::Combine`]),
+    /// as File Explorer's "Combine files in PdfCraft…" starts. They join the list as files picked
+    /// with Add files… do (images and text files become PDFs); with none, the list shows as it is.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn combine_paths(&mut self, paths: &[String]) {
+        let paths: Vec<std::path::PathBuf> = paths.iter().map(std::path::PathBuf::from).collect();
+        self.use_paths(crate::files::FilePurpose::Combine, &paths);
+        // Also when a file couldn't be read (`use_paths` said why) or none was named.
+        self.open_combine_tab();
+    }
+
     /// Add the PDFs, images and text files in `dir` to the Combine files list, as one undo step.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn add_folder_to_combine(&mut self, dir: &std::path::Path, recursive: bool) {

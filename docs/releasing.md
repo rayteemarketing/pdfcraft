@@ -120,7 +120,8 @@ neither the MSI nor the portable zip needs the Visual C++ redistributable.
 - `installer-ui.wxs` supplies native welcome, maintenance, progress, files-in-use and outcome
   dialogs. Full UI confirms success with Finish; failures and cancellations have distinct messages.
   The welcome dialog has a "Create a desktop shortcut" checkbox and an "Edit with PdfCraft"
-  right-click menu checkbox, both ticked by default. `/qn` and `/qb` stay unattended and create
+  right-click menu checkbox (which also governs "Combine files in PdfCraft…" on PDFs), both ticked
+  by default. `/qn` and `/qb` stay unattended and create
   both unless `INSTALLDESKTOPSHORTCUT=0` or `INSTALLPDFCONTEXTMENU=0` is passed;
   `INSTALLIMAGECONTEXTMENU=0` (no checkbox) leaves out the image menu. An update (the launcher runs
   `msiexec /passive` with no properties) keeps the desktop shortcut only if `PdfCraft.lnk` is still
@@ -140,8 +141,16 @@ neither the MSI nor the portable zip needs the Visual C++ redistributable.
   types, in its own component (`PdfcraftImageContextMenu`) since it became optional. Its rows moved
   out of `PdfcraftApp`; that's safe because `MajorUpgrade` removes the old version before installing
   the new one (`afterInstallValidate`), which `test-msi.ps1` checks.
+- The "Combine files in PdfCraft…" entry (#585) is one verb, `PdfCraft.Combine`, on `.pdf` and the
+  same ten image types, so a selection mixing PDFs and images shows it too. Each selected file starts
+  `pdfcraft.exe --combine "<file>"`; the first launch opens the Combine files tab with its file, and
+  the single-instance hand-off adds every later launch's file to the same list (`{"combine":[…]}`
+  instead of `{"open":[…]}`). `MultiSelectModel` is `Player`, which keeps the entry for more than 15
+  selected files. It has no property of its own: the `.pdf` part (`PdfcraftPdfCombineMenu`) goes with
+  `INSTALLPDFCONTEXTMENU` and the image part (`PdfcraftImageCombineMenu`) with
+  `INSTALLIMAGECONTEXTMENU`, so it is left out and kept on update exactly as those menus are.
 - `test-msi.ps1 <file.msi>` checks the compiled shortcut, context-menu and dialog tables, and
-  evaluates the first-install and update conditions of the desktop shortcut and both menus. Packaging
+  evaluates the first-install and update conditions of the desktop shortcut and every menu. Packaging
   runs it in a child process before signing, so the MSI isn't held open when signtool runs. The ARM64 install
   smoke test checks that both all-users shortcuts point at the installed `pdfcraft.exe` and are
   removed on uninstall, and that `INSTALLDESKTOPSHORTCUT=0` skips the desktop one.

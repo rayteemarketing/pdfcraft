@@ -392,11 +392,15 @@ pub type Inbox = std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<u8>)>>>;
 pub type FailedInbox = std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>;
 
 /// A request the operating system sends the running app, outside its window: on macOS, Finder
-/// double-clicks, Open With and drops on the Dock icon arrive as Apple events, not arguments.
+/// double-clicks, Open With and drops on the Dock icon arrive as Apple events, not arguments; on
+/// Windows, Linux and the BSDs, later launches hand their files to the running app.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OsEvent {
     /// Open these files.
     Open(Vec<String>),
+    /// Add these files to the Combine files list and show it, opening the tab if needed (a
+    /// `pdfcraft --combine` launch: File Explorer's "Combine files in PdfCraft…").
+    Combine(Vec<String>),
     /// Quit (the Dock's Quit, logging out), asking about unsaved changes first.
     Quit,
 }
@@ -3068,6 +3072,12 @@ impl eframe::App for PdfCraftApp {
                 OsEvent::Open(paths) => paths.iter().for_each(|p| self.open_path(p)),
                 #[cfg(target_arch = "wasm32")]
                 OsEvent::Open(_) => {}
+                // A burst of launches from one File Explorer selection arrives as several of
+                // these: each adds to the same list.
+                #[cfg(not(target_arch = "wasm32"))]
+                OsEvent::Combine(paths) => self.combine_paths(&paths),
+                #[cfg(target_arch = "wasm32")]
+                OsEvent::Combine(_) => {}
                 // Like closing the window: `guard_quit` asks about unsaved changes.
                 OsEvent::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             }

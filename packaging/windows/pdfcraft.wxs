@@ -8,8 +8,9 @@
   optional, and an update keeps it only if it is still there), an App Paths entry, PdfCraft registered as a PDF handler (offered under "Open with"
   and in Default apps, never forced as the default), "Edit with PdfCraft" on PDF files'
   right-click menu and "Create PDF with PdfCraft…" on image files' right-click menu (both on by
-  default, optional, and an update keeps the installed version's choice). Files opened with
-  PdfCraft arrive on its command line.
+  default, optional, and an update keeps the installed version's choice), and "Combine files in
+  PdfCraft…" on both, which goes with each of those. Files opened with PdfCraft arrive on its
+  command line.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
@@ -60,7 +61,9 @@
          key, the way the desktop shortcut looks for its file: AppSearch runs before the old version
          is removed. Releases from before a menu existed (the PDF one came in 0.7.1, the image one in
          0.4.0) never had the key, so updating from one of them counts as a first install; the
-         OnlyDetect rows below tell them apart. A value given on the command line wins. -->
+         OnlyDetect rows below tell them apart. A value given on the command line wins. The same
+         two properties govern "Combine files in PdfCraft…" on PDFs and on images respectively
+         (PdfcraftPdfCombineMenu, PdfcraftImageCombineMenu). -->
     <Upgrade Id="EA00C367-7270-4C50-9D8B-A7A5C88AD27F">
       <UpgradeVersion Minimum="0.7.1" IncludeMinimum="yes" OnlyDetect="yes" Property="PDFCONTEXTMENURELEASE" />
       <UpgradeVersion Minimum="0.4.0" IncludeMinimum="yes" OnlyDetect="yes" Property="IMAGECONTEXTMENURELEASE" />
@@ -198,6 +201,67 @@
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.CreatePdf" Name="MultiSelectModel" Value="Single" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.CreatePdf\command" Value="&quot;[#PdfcraftExe]&quot; --create-images &quot;%1&quot;" Type="string" />
+      </Component>
+
+      <!-- "Combine files in PdfCraft…" on PDF files and images: the Combine files tab, listing the
+           selected files. A classic verb with a "%1" command line starts one launch per selected
+           file, each asking to combine; the single-instance hand-off sends every later launch's file
+           to the first one's window, where they all join one list. One verb name on every type, so a
+           selection mixing PDFs and images gets the entry too. Player, rather than the Document of
+           "Edit with PdfCraft", keeps the entry when more than 15 files are selected. On Windows 11
+           it is under "Show more options", like the other entries. It goes with the menu of each
+           kind of file, so INSTALLPDFCONTEXTMENU=0 and INSTALLIMAGECONTEXTMENU=0 leave it out too,
+           and an update keeps it where that menu is kept. Each part is its own component with an
+           HKLM key path, so uninstall removes it. -->
+      <Component Id="PdfcraftPdfCombineMenu" Guid="E2D8D9AB-18B3-4B2A-B749-A1A93F2ED153"
+          Condition="INSTALLPDFCONTEXTMENU = 1">
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Combine" Value="Combine files in PdfCraft…" Type="string" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Combine" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Combine" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Combine\command" Value="&quot;[#PdfcraftExe]&quot; --combine &quot;%1&quot;" Type="string" />
+      </Component>
+      <Component Id="PdfcraftImageCombineMenu" Guid="FB3E34D9-9D8D-47CF-8FAE-7D9906810B02"
+          Condition="INSTALLIMAGECONTEXTMENU = 1">
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.png\shell\PdfCraft.Combine" Value="Combine files in PdfCraft…" Type="string" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.png\shell\PdfCraft.Combine" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.png\shell\PdfCraft.Combine" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.png\shell\PdfCraft.Combine\command" Value="&quot;[#PdfcraftExe]&quot; --combine &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpg\shell\PdfCraft.Combine" Value="Combine files in PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpg\shell\PdfCraft.Combine" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpg\shell\PdfCraft.Combine" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpg\shell\PdfCraft.Combine\command" Value="&quot;[#PdfcraftExe]&quot; --combine &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\PdfCraft.Combine" Value="Combine files in PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\PdfCraft.Combine" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\PdfCraft.Combine" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\PdfCraft.Combine\command" Value="&quot;[#PdfcraftExe]&quot; --combine &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tif\shell\PdfCraft.Combine" Value="Combine files in PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tif\shell\PdfCraft.Combine" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tif\shell\PdfCraft.Combine" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tif\shell\PdfCraft.Combine\command" Value="&quot;[#PdfcraftExe]&quot; --combine &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tiff\shell\PdfCraft.Combine" Value="Combine files in PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tiff\shell\PdfCraft.Combine" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tiff\shell\PdfCraft.Combine" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tiff\shell\PdfCraft.Combine\command" Value="&quot;[#PdfcraftExe]&quot; --combine &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.gif\shell\PdfCraft.Combine" Value="Combine files in PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.gif\shell\PdfCraft.Combine" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.gif\shell\PdfCraft.Combine" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.gif\shell\PdfCraft.Combine\command" Value="&quot;[#PdfcraftExe]&quot; --combine &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.bmp\shell\PdfCraft.Combine" Value="Combine files in PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.bmp\shell\PdfCraft.Combine" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.bmp\shell\PdfCraft.Combine" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.bmp\shell\PdfCraft.Combine\command" Value="&quot;[#PdfcraftExe]&quot; --combine &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jp2\shell\PdfCraft.Combine" Value="Combine files in PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jp2\shell\PdfCraft.Combine" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jp2\shell\PdfCraft.Combine" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jp2\shell\PdfCraft.Combine\command" Value="&quot;[#PdfcraftExe]&quot; --combine &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.j2k\shell\PdfCraft.Combine" Value="Combine files in PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.j2k\shell\PdfCraft.Combine" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.j2k\shell\PdfCraft.Combine" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.j2k\shell\PdfCraft.Combine\command" Value="&quot;[#PdfcraftExe]&quot; --combine &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.Combine" Value="Combine files in PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.Combine" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.Combine" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.Combine\command" Value="&quot;[#PdfcraftExe]&quot; --combine &quot;%1&quot;" Type="string" />
       </Component>
 
       <Component Id="PdfcraftCli">
