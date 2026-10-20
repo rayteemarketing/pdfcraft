@@ -37,10 +37,10 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Format
         run: cargo fmt --all -- --check
-      - name: Clippy (app and UI)
-        run: cargo clippy -p pdfcraft -p pdfcraft-ui-egui --all-targets -- -D warnings
-      - name: Test (app and UI)
-        run: cargo test -p pdfcraft -p pdfcraft-ui-egui
+      - name: Clippy (app, UI, engine, CLI and automation)
+        run: cargo clippy -p pdfcraft -p pdfcraft-ui-egui -p pdfcraft-engine -p pdfcraft-cli -p pdfcraft-automation --all-targets -- -D warnings
+      - name: Test (app, UI, engine, CLI and automation)
+        run: cargo test -p pdfcraft -p pdfcraft-ui-egui -p pdfcraft-engine -p pdfcraft-cli -p pdfcraft-automation
       - name: Assets (licences and attribution)
         run: cargo xtask assets
       - name: Install WiX
