@@ -606,6 +606,6 @@ mod tests {
         }));
         // `symlink_metadata`, not `exists`, which follows the socket's reparse point and can fail.
         assert!(std::fs::symlink_metadata(&path).is_ok(), "the socket file stays behind");
-        assert!(matches!(claim_at(&path, &["C:\\a.pdf".into()], true), Claim::Primary(_)));
+        assert!(matches!(claim_at(&path, &Request::Open(vec!["C:\\a.pdf".into()]), true), Claim::Primary(_)));
     }
 }
