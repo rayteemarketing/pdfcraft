@@ -1,0 +1,172 @@
+name: Fork build
+
+# Build this branch's Windows installers and universal macOS DMG on standard GitHub runners.
+# No signing secrets: Windows is unsigned; macOS is ad-hoc signed and not notarized.
+# Tag runs publish both platforms together, with one launcher-compatible SHA256SUMS.txt.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [fork/montserrat-zoom-combine]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-build-${{ github.ref }}
+  # Let tag runs finish publishing; branch builds can be superseded.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  windows:
+    name: Windows x64 (test and package)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+      PDFCRAFT_REQUIRE_WINRES: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy (app, UI, engine, CLI and automation)
+        run: cargo clippy -p pdfcraft -p pdfcraft-ui-egui -p pdfcraft-engine -p pdfcraft-cli -p pdfcraft-automation --all-targets -- -D warnings
+      - name: Test (app, UI, engine, CLI and automation)
+        run: cargo test -p pdfcraft -p pdfcraft-ui-egui -p pdfcraft-engine -p pdfcraft-cli -p pdfcraft-automation
+      - name: Assets (licences and attribution)
+        run: cargo xtask assets
+      - name: Install WiX
+        run: dotnet tool install --global wix --version 5.0.2
+      - name: Check out craft-fonts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: storytold/craft-fonts
+          ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
+          path: craft-fonts
+      - name: Package (unsigned)
+        shell: pwsh
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+          CRAFT_FONTS_REQUIRED: "1"
+        run: pwsh packaging/windows/package.ps1 -Arch x64
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pdfcraft-windows-x64
+          path: |
+            dist/release/*.msi
+            dist/release/*.zip
+          if-no-files-found: error
+
+  macos:
+    name: macOS universal (ad-hoc signed)
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      MACOS_SIGN_IDENTITY: "-"
+      CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+      CRAFT_FONTS_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Same optional font input as upstream's release workflow; no font files are vendored here.
+      - name: Check out craft-fonts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: storytold/craft-fonts
+          ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
+          path: craft-fonts
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: macos-universal
+      # The script builds both targets, lipos the app and CLI, signs ad hoc, and verifies the
+      # signed app again inside the mounted DMG. It also copies this branch's icon and DMG layout.
+      - name: Build and package (ad-hoc signed)
+        run: packaging/macos/package.sh --arch universal
+      - name: Check universal app, metadata and fork assets
+        run: |
+          . packaging/env.sh
+          app="$CARGO_TARGET_DIR/macos-package/PdfCraft.app"
+          stage="$CARGO_TARGET_DIR/macos-package/dmg"
+          plist="$app/Contents/Info.plist"
+          lipo -verify_arch x86_64 arm64 "$app/Contents/MacOS/PdfCraft"
+          test "$(plutil -extract CFBundleExecutable raw -o - "$plist")" = PdfCraft
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$plist")" = ai.storyteller.pdfcraft
+          test "$(plutil -extract CFBundleName raw -o - "$plist")" = PdfCraft
+          test "$(plutil -extract CFBundleDisplayName raw -o - "$plist")" = PdfCraft
+          test "$(plutil -extract CFBundleIconFile raw -o - "$plist")" = PdfCraft
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "$plist")" = "${VERSION%%-*}"
+          test "$(plutil -extract CFBundleVersion raw -o - "$plist")" = "${VERSION%%-*}"
+          test "$(plutil -extract PdfCraftVersion raw -o - "$plist")" = "$VERSION"
+          test "$(plutil -extract PdfCraftBuildCommit raw -o - "$plist")" = "$GITHUB_SHA"
+          cmp assets/app-icon/pdfcraft.icns "$app/Contents/Resources/PdfCraft.icns"
+          cmp packaging/macos/dmg/background.tiff "$stage/.background/background.tiff"
+          cmp packaging/macos/dmg/dmg-layout.DS_Store "$stage/.DS_Store"
+          test "$(readlink "$stage/Applications")" = /Applications
+          codesign --verify --strict --deep --verbose=2 "$app"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pdfcraft-macos-universal
+          path: dist/release/*.dmg
+          if-no-files-found: error
+
+  publish:
+    name: Publish release (version tags only)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: pdfcraft-*
+          path: dist/release
+          merge-multiple: true
+      - name: Verify assets, checksum and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          . packaging/env.sh
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::Tag $TAG does not match Cargo.toml version $VERSION"
+            exit 1
+          fi
+          cd "$DIST"
+          files=(
+            "pdfcraft-$VERSION-windows-x64.msi"
+            "pdfcraft-$VERSION-windows-x64-portable.zip"
+            "pdfcraft-$VERSION-macos-universal.dmg"
+          )
+          for file in "${files[@]}"; do
+            if [ ! -s "$file" ]; then
+              echo "::error::Missing or empty release asset: $file"
+              exit 1
+            fi
+          done
+          # Reject unexpected files (including installers carrying a different version).
+          if [ "$(find . -type f | wc -l)" -ne "${#files[@]}" ]; then
+            echo "::error::Unexpected files in release artifacts"
+            find . -type f
+            exit 1
+          fi
+          # sha256sum emits lowercase hex, two spaces, the basename, and LF endings.
+          sha256sum "${files[@]}" > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+          # Keep the release a draft until all assets and checksums have uploaded successfully.
+          gh release create "$TAG" "${files[@]}" SHA256SUMS.txt \
+            --verify-tag --draft --title "PdfCraft v$VERSION" \
+            --notes "PdfCraft $VERSION from this fork: Windows x64 (unsigned) and macOS universal (Intel + Apple Silicon, ad-hoc signed, not notarized). Includes the stacked-pages icon, Montserrat, fit-page opening zoom and Combine changes. macOS may require System Settings → Privacy & Security → Open Anyway; Windows SmartScreen may require More info → Run anyway."
+          gh release edit "$TAG" --draft=false
