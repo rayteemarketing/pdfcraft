@@ -1645,3 +1645,27 @@ fn long_view_menu_fits_a_short_window() {
     h.run_steps(4);
     assert_eq!(h.state().right, Some(pdfcraft_ui_egui::RightPanel::Bookmarks));
 }
+
+/// Settings from before the fit-page default saved "fit-width" whether or not anyone chose it: that
+/// value is passed over once, while a fit width chosen since (saved with the rev) sticks.
+#[test]
+fn old_fit_width_settings_move_to_the_fit_page_default() {
+    use pdfcraft_ui_egui::canvas::Fit;
+    // As the desktop app starts: fit page, then the saved settings.
+    let started = || {
+        let mut app = PdfCraftApp::new();
+        app.view_defaults.fit = Fit::Page;
+        app
+    };
+    let mut old = started();
+    old.restore(r#"{"default_zoom": "fit-width"}"#);
+    assert_eq!(old.view_defaults.fit, Fit::Page);
+    let mut chosen = started();
+    chosen.view_defaults.fit = Fit::Width;
+    let mut restarted = started();
+    restarted.restore(&chosen.persist());
+    assert_eq!(restarted.view_defaults.fit, Fit::Width, "a fit width chosen after the change sticks");
+    let mut percent = started();
+    percent.restore(r#"{"default_zoom": "125%"}"#);
+    assert_eq!((percent.view_defaults.fit, percent.view_defaults.zoom), (Fit::None, 1.25));
+}

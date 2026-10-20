@@ -561,6 +561,7 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         }
                         if widgets::menu_item(ui, tl!("Zoom to page level"), &key(PAGE_LEVEL)).clicked() {
                             v.fit = Fit::Page;
+                            v.opening_fit = false;
                         }
                         if widgets::menu_item(ui, tl!("Fit to width"), &key(FIT_WIDTH)).clicked() {
                             v.fit = Fit::Width;

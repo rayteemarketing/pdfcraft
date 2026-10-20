@@ -373,6 +373,9 @@ fn app_creator<'a>(
         let mut app = PdfCraftApp::new();
         // First start (or settings from before Units existed): the region's unit.
         app.units = pdfcraft_ui_egui::units::Unit::system();
+        // Documents open at fit page, never above 100% until the zoom is changed; a zoom chosen
+        // in Preferences replaces it.
+        app.view_defaults.fit = pdfcraft_ui_egui::canvas::Fit::Page;
         #[cfg(target_os = "linux")]
         app.enable_desktop_theme();
         // The system's reopen-windows choice (macOS) starts the preference; a saved choice replaces it.

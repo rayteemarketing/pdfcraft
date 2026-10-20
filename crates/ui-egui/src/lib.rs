@@ -887,6 +887,10 @@ fn rgb_triple(v: &serde_json::Value) -> Option<[f64; 3]> {
     Some(out)
 }
 
+/// Saved with the settings since the desktop app opens documents at fit page (its start-up sets
+/// that default). Settings without it carry the old fit-width default, which `restore` passes over.
+const DEFAULT_ZOOM_REV: u64 = 2;
+
 impl PdfCraftApp {
     pub fn new() -> Self {
         Self {
@@ -1123,7 +1127,8 @@ impl PdfCraftApp {
             M::Default => {}
             M::ActualSize => view.set_zoom(1.0),
             M::Percent(p) => view.set_zoom((p / 100.0) as f32),
-            M::FitPage | M::FitVisible => view.fit = canvas::Fit::Page,
+            // The document asks for it: the whole fit, not the opening fit's 100% limit.
+            M::FitPage | M::FitVisible => (view.fit, view.opening_fit) = (canvas::Fit::Page, false),
             M::FitWidth => view.fit = canvas::Fit::Width,
             M::FitHeight => view.fit = canvas::Fit::Height,
         }
@@ -2309,6 +2314,7 @@ impl PdfCraftApp {
         v["redact_prefs"] = self.redact_defaults.to_json();
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
+        v["default_zoom_rev"] = serde_json::Value::from(DEFAULT_ZOOM_REV);
         v.to_string()
     }
 
@@ -2375,7 +2381,11 @@ impl PdfCraftApp {
         if let Some(closed) = v["right_panel_closed"].as_bool() {
             self.right_panel_closed = closed;
         }
-        if let Some(defaults) = v["default_zoom"].as_str().and_then(|zoom| self.view_defaults.with_zoom(zoom)) {
+        // Settings from before the fit-page default saved the old fit-width default whether or
+        // not anyone chose it, so that one value is passed over once; later saves carry the rev.
+        let rev = v["default_zoom_rev"].as_u64().unwrap_or(0);
+        let saved_zoom = v["default_zoom"].as_str().filter(|zoom| rev >= DEFAULT_ZOOM_REV || !zoom.trim().eq_ignore_ascii_case("fit-width"));
+        if let Some(defaults) = saved_zoom.and_then(|zoom| self.view_defaults.with_zoom(zoom)) {
             self.view_defaults = defaults;
         }
         if let Some(language) = v["language"].as_str().and_then(i18n::normalize_pref) {

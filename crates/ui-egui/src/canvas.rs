@@ -371,6 +371,9 @@ pub struct DocView {
     pub id: DocId,
     pub zoom: f32,
     pub fit: Fit,
+    /// Opened at the default fit page: the zoom stays at or under 100%, so a small page or image
+    /// isn't blown up, until the zoom is changed (choosing Fit Page again included).
+    pub opening_fit: bool,
     pub layout: PageLayout,
     /// Whether the base layout scrolls continuously (independent of `layout`, as in Acrobat).
     pub continuous: bool,
@@ -701,6 +704,7 @@ impl DocView {
             id,
             zoom: defaults.zoom,
             fit: defaults.fit,
+            opening_fit: defaults.fit == Fit::Page,
             layout: defaults.layout,
             continuous: defaults.continuous,
             rotation: 0,
@@ -853,6 +857,7 @@ impl DocView {
         let mut fresh = Self::new(self.id, info, ViewDefaults::default());
         fresh.zoom = self.zoom;
         fresh.fit = self.fit;
+        fresh.opening_fit = self.opening_fit;
         fresh.layout = self.layout;
         fresh.continuous = self.continuous;
         fresh.rotation = self.rotation;
@@ -1236,6 +1241,7 @@ impl DocView {
             }
             DestView::Fit => {
                 self.fit = Fit::Page;
+                self.opening_fit = false;
                 return;
             }
             DestView::FitH { top } => {
@@ -1368,6 +1374,7 @@ impl DocView {
     /// Switch the zoom mode, keeping the current page in view.
     pub fn set_fit(&mut self, fit: Fit) {
         self.fit = fit;
+        self.opening_fit = false;
         self.goto = Some((self.current, 0.0));
         self.reset_coarse_state();
     }
@@ -1942,6 +1949,10 @@ impl DocView {
     }
 
     fn fit_zoom(&mut self, info: &DocInfo) {
+        // Any other zoom ends the opening fit; coming back to fit page then fills the window.
+        if self.fit != Fit::Page {
+            self.opening_fit = false;
+        }
         let largest = |side: fn((f32, f32)) -> f32| info.pages.iter().map(|p| side(self.display_size(p))).fold(1.0, f32::max);
         let max_w = largest(|s| s.0);
         // A single page shown on its own fits that page. Every other display (scrolling, or a
@@ -1960,6 +1971,9 @@ impl DocView {
                 let zw = (avail_w - GAP * (per_row - 1.0)) / (w * PT * per_row);
                 let zh = (self.viewport_h - 2.0 * MARGIN) / (h * PT);
                 self.zoom = zw.min(zh);
+                if self.opening_fit {
+                    self.zoom = self.zoom.min(1.0);
+                }
             }
             Fit::Height => self.zoom = (self.viewport_h - 2.0 * MARGIN) / (h * PT),
             Fit::None => {}
@@ -2268,6 +2282,7 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
         }
         if zoom_reset {
             view.fit = Fit::Page;
+            view.opening_fit = false;
             view.goto = Some((view.current, 0.0));
         }
     }
@@ -6389,6 +6404,39 @@ trailer << /Root 1 0 R >>
         v.current = 0;
         v.fit_zoom(&info);
         assert_eq!(v.zoom, wide, "continuous fit width holds still across page sizes");
+    }
+
+    #[test]
+    fn opening_fit_page_never_enlarges_past_actual_size() {
+        let page =
+            |width: f32, height: f32| pdfcraft_render::PageInfo { width, height, label: String::new(), crop: [0.0, 0.0, width, height], rotation: 0 };
+        let defaults = ViewDefaults { fit: Fit::Page, ..ViewDefaults::default() };
+        // A small image page in a big window opens at 100%, not blown up to fill it.
+        let small = DocInfo { pages: vec![page(200.0, 150.0)], ..Default::default() };
+        let mut v = DocView::new(DocId(1), &small, defaults);
+        (v.viewport_w, v.viewport_h) = (1600.0, 1000.0);
+        v.fit_zoom(&small);
+        assert_eq!(v.zoom, 1.0);
+        // A page bigger than the window still shrinks to show all of it.
+        let letter = DocInfo { pages: vec![page(612.0, 792.0)], ..Default::default() };
+        let mut big = DocView::new(DocId(2), &letter, defaults);
+        (big.viewport_w, big.viewport_h) = (1600.0, 800.0);
+        big.fit_zoom(&letter);
+        assert!(big.zoom < 1.0 && (big.zoom * 792.0 * PT - (800.0 - 2.0 * MARGIN)).abs() < 0.5, "{}", big.zoom);
+        // Choosing Fit Page fills the window, small page or not.
+        v.set_fit(Fit::Page);
+        v.fit_zoom(&small);
+        assert!(v.zoom > 1.0, "{}", v.zoom);
+        // So does coming back to fit page from another zoom.
+        let mut w = DocView::new(DocId(3), &small, defaults);
+        (w.viewport_w, w.viewport_h) = (1600.0, 1000.0);
+        w.fit = Fit::Width;
+        w.fit_zoom(&small);
+        w.fit = Fit::Page;
+        w.fit_zoom(&small);
+        assert!(w.zoom > 1.0, "{}", w.zoom);
+        // The built-in default is unchanged (fit width); the desktop app picks fit page at start.
+        assert!(!DocView::new(DocId(4), &small, ViewDefaults::default()).opening_fit);
     }
 
     #[test]
