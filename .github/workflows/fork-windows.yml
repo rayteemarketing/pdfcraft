@@ -1,16 +1,19 @@
 name: Fork Windows build
 
 # This fork's own Windows build, on GitHub's standard (free for public repos) runner: lint and test
-# the app and UI crates, then package an unsigned x64 MSI and portable zip with
-# packaging/windows/package.ps1. The upstream release workflow needs ArtCraft's signing secrets.
+# the app, UI, engine, CLI and automation crates, then package an unsigned x64 MSI and portable zip
+# with packaging/windows/package.ps1. The upstream release workflow needs ArtCraft's signing secrets.
 #
-# Download the installer from the run's artifacts. Windows SmartScreen warns about an unsigned
-# installer: More info, then Run anyway.
+# A pushed version tag (v0.9.1, …) also publishes a GitHub Release with the MSI, the portable zip
+# and SHA256SUMS.txt, named as upstream's are, which is what the fork of ArtCraft Launcher installs
+# and updates PdfCraft from. Windows SmartScreen warns about the unsigned installer: More info, then
+# Run anyway.
 
 on:
   workflow_dispatch:
   push:
     branches: [fork/montserrat-zoom-combine]
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -24,6 +27,8 @@ jobs:
     name: Windows x64 (test and package)
     runs-on: windows-latest
     timeout-minutes: 120
+    permissions:
+      contents: write
     env:
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       CARGO_PROFILE_TEST_DEBUG: line-tables-only
@@ -55,3 +60,22 @@ jobs:
             dist/release/*.msi
             dist/release/*.zip
           if-no-files-found: error
+      - name: Publish the release (version tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = $env:TAG.TrimStart('v')
+          $files = @(Get-ChildItem dist/release -File | Where-Object { $_.Extension -in '.msi', '.zip' })
+          if ($files.Count -eq 0) { throw 'no installers in dist/release' }
+          foreach ($f in $files) {
+            if (-not $f.Name.StartsWith("pdfcraft-$version-")) { throw "$($f.Name) doesn't carry version $version" }
+          }
+          # Upstream's format: "<lowercase sha256>  <file name>", one per line, LF endings.
+          $sums = ($files | ForEach-Object { '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name }) -join "`n"
+          [System.IO.File]::WriteAllText((Join-Path $PWD 'dist/release/SHA256SUMS.txt'), "$sums`n")
+          gh release create $env:TAG @($files.FullName) dist/release/SHA256SUMS.txt `
+            --title "PdfCraft v$version" `
+            --notes "PdfCraft $version for Windows x64 (unsigned): stacked-pages icon, Montserrat, documents open at fit page (never above 100%), Explorer's Combine files in PdfCraft…, and no ArtCraft community links."
