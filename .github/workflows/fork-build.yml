@@ -98,7 +98,7 @@ jobs:
           app="$CARGO_TARGET_DIR/macos-package/PdfCraft.app"
           stage="$CARGO_TARGET_DIR/macos-package/dmg"
           plist="$app/Contents/Info.plist"
-          lipo -verify_arch x86_64 arm64 "$app/Contents/MacOS/PdfCraft"
+          lipo "$app/Contents/MacOS/PdfCraft" -verify_arch x86_64 arm64
           test "$(plutil -extract CFBundleExecutable raw -o - "$plist")" = PdfCraft
           test "$(plutil -extract CFBundleIdentifier raw -o - "$plist")" = ai.storyteller.pdfcraft
           test "$(plutil -extract CFBundleName raw -o - "$plist")" = PdfCraft
