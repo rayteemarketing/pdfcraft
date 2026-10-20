@@ -2157,6 +2157,39 @@ usage = "UI icon, embedded via crates/ui-egui/src/icon_data.rs"
 sha256 = "486119c5803718fce74a1e2fe9b93bca4864fd9178139ca355339011e989bcb8"
 
 [[asset]]
+path = "assets/fonts/Montserrat-Regular.ttf"
+title = "Montserrat Regular"
+author = "The Montserrat Project Authors (Julieta Ulanovsky)"
+source = "https://github.com/JulietaUla/Montserrat (Google Fonts static build, version 9.000)"
+licence = "OFL-1.1"
+licence_file = "assets/fonts/OFL-Montserrat.txt"
+kind = "font"
+usage = "UI font, embedded in the app (regular text)"
+sha256 = "ef9cf99f0175bef530b88934bd904fcf56f773cec6fd4dfb8ccaf7ce2bbd395e"
+
+[[asset]]
+path = "assets/fonts/Montserrat-Medium.ttf"
+title = "Montserrat Medium"
+author = "The Montserrat Project Authors (Julieta Ulanovsky)"
+source = "https://github.com/JulietaUla/Montserrat (Google Fonts static build, version 9.000)"
+licence = "OFL-1.1"
+licence_file = "assets/fonts/OFL-Montserrat.txt"
+kind = "font"
+usage = "UI font, embedded in the app (medium labels)"
+sha256 = "cd161cba3a3cdcf68ad721920fcd164c87e7b7cc9e6bad510278c3fa378d91d2"
+
+[[asset]]
+path = "assets/fonts/Montserrat-SemiBold.ttf"
+title = "Montserrat SemiBold"
+author = "The Montserrat Project Authors (Julieta Ulanovsky)"
+source = "https://github.com/JulietaUla/Montserrat (Google Fonts static build, version 9.000)"
+licence = "OFL-1.1"
+licence_file = "assets/fonts/OFL-Montserrat.txt"
+kind = "font"
+usage = "UI font, embedded in the app (semibold headings)"
+sha256 = "9c4db3814875410e7d64fdc8e69676c3b84968bb15bf3ace8b3944c59fbc56b6"
+
+[[asset]]
 path = "assets/fonts/Inter-Regular.ttf"
 title = "Inter Regular"
 author = "The Inter Project Authors (Rasmus Andersson)"
@@ -2175,7 +2208,7 @@ source = "https://github.com/rsms/inter"
 licence = "OFL-1.1"
 licence_file = "assets/fonts/OFL-Inter.txt"
 kind = "font"
-usage = "UI font, embedded in the app; demo PDF labels"
+usage = "UI fallback behind Montserrat at the same weight (letters Montserrat lacks, such as Greek), embedded in the app; demo PDF labels"
 sha256 = "97ad806f526e41546d46365bb3a393145f75b7b1568913db74549ad8b8dba872"
 
 [[asset]]
@@ -2186,7 +2219,7 @@ source = "https://github.com/rsms/inter"
 licence = "OFL-1.1"
 licence_file = "assets/fonts/OFL-Inter.txt"
 kind = "font"
-usage = "UI font, embedded in the app; demo PDF labels"
+usage = "UI fallback behind Montserrat at the same weight (letters Montserrat lacks, such as Greek), embedded in the app; demo PDF labels"
 sha256 = "78a843fade9d4612a5567302fb595b56976eb5fcebf4fea5a5912d638bafcde3"
 
 [[asset]]

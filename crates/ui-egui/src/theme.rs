@@ -281,7 +281,7 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
     fonts
 }
 
-/// The interface fonts: Inter (and JetBrains Mono for code) first, then egui's defaults, then
+/// The interface fonts: Montserrat, Inter behind it, and JetBrains Mono for code first, then egui's defaults, then
 /// the CJK, Arabic, Telugu, Hebrew and Thai faces of the optional craft-fonts build input as the
 /// last fallback in every family. Without craft-fonts there is no Japanese, Chinese, Arabic,
 /// Telugu, Hebrew or Thai face here.
@@ -336,13 +336,24 @@ fn baseline_drop(primary: [f32; 3], fallback: [f32; 3]) -> f32 {
     ((a + d) - (pa + pd) + pg - g) / 2.0
 }
 
-/// `data` with its glyphs moved onto Inter's baseline (#1676). Without this, Chinese next to Latin
-/// in one label sits higher or lower than the Latin by a few percent of the font size, depending on
-/// the installed Chinese face (PingFang, Microsoft JhengHei, SimSun…). Inter is the first face of
-/// every proportional family; the monospace family's JetBrains Mono differs from it by 0.004 em,
-/// well under a pixel. A face that doesn't parse is left as it is (egui will skip it anyway).
+/// The interface face, Montserrat (OFL-1.1): Regular, and Medium and SemiBold for the `medium` and
+/// `semibold` families.
+const MONTSERRAT_REGULAR: &[u8] = include_bytes!("../../../assets/fonts/Montserrat-Regular.ttf");
+const MONTSERRAT_MEDIUM: &[u8] = include_bytes!("../../../assets/fonts/Montserrat-Medium.ttf");
+const MONTSERRAT_SEMIBOLD: &[u8] = include_bytes!("../../../assets/fonts/Montserrat-SemiBold.ttf");
+
+/// The faces that keep their own metrics. Every other face, Inter included, is moved onto
+/// Montserrat's baseline ([`on_interface_baseline`]).
+const PRIMARY_FACES: [&str; 4] = ["Montserrat", "Montserrat-Medium", "Montserrat-SemiBold", "JetBrainsMono"];
+
+/// `data` with its glyphs moved onto Montserrat's baseline (#1676). Without this, Chinese next to
+/// Latin in one label sits higher or lower than the Latin by a few percent of the font size,
+/// depending on the installed Chinese face (PingFang, Microsoft JhengHei, SimSun…). Montserrat is
+/// the first face of every proportional family; the monospace family's JetBrains Mono differs from
+/// it by under 0.01 em, well under a pixel. A face that doesn't parse is left as it is (egui will
+/// skip it anyway).
 pub(crate) fn on_interface_baseline(mut data: FontData) -> FontData {
-    let primary = vertical_metrics(pdfcraft_fonts::INTER_REGULAR, 0);
+    let primary = vertical_metrics(MONTSERRAT_REGULAR, 0);
     if let (Some(primary), Some(fallback)) = (primary, vertical_metrics(&data.font, data.index)) {
         data.tweak.y_offset_factor = -baseline_drop(primary, fallback);
     }
@@ -353,23 +364,28 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
     let mut fonts = FontDefinitions::default();
     let add = |fonts: &mut FontDefinitions, name: &str, bytes: &'static [u8]| {
         let data = FontData::from_static(bytes);
-        let data = if ["Inter", "Inter-Medium", "Inter-SemiBold", "JetBrainsMono"].contains(&name) {
-            data.tweak(primary_font_tweak(platform, name))
-        } else {
-            on_interface_baseline(data)
-        };
+        let data = if PRIMARY_FACES.contains(&name) { data.tweak(primary_font_tweak(platform, name)) } else { on_interface_baseline(data) };
         fonts.font_data.insert(name.to_owned(), Arc::new(data));
     };
-    // Shared with typed signatures' fallback glyphs, so the font is embedded once.
+    add(&mut fonts, "Montserrat", MONTSERRAT_REGULAR);
+    add(&mut fonts, "Montserrat-Medium", MONTSERRAT_MEDIUM);
+    add(&mut fonts, "Montserrat-SemiBold", MONTSERRAT_SEMIBOLD);
+    add(&mut fonts, "JetBrainsMono", include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf"));
+    // Inter, right behind Montserrat at each weight, draws the letters Montserrat lacks (Greek,
+    // among others) in a face of the app's own. The regular is shared with typed signatures'
+    // fallback glyphs, so the font is embedded once.
     add(&mut fonts, "Inter", pdfcraft_fonts::INTER_REGULAR);
     add(&mut fonts, "Inter-Medium", include_bytes!("../../../assets/fonts/Inter-Medium.ttf"));
     add(&mut fonts, "Inter-SemiBold", include_bytes!("../../../assets/fonts/Inter-SemiBold.ttf"));
-    add(&mut fonts, "JetBrainsMono", include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf"));
-    fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "Inter".to_owned());
-    fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "JetBrainsMono".to_owned());
-    // Keep missing Latin/Cyrillic letters in the app's own faces (for example Bulgarian ѝ,
-    // absent from JetBrains Mono), before egui's defaults or optional system/CJK fallbacks.
-    fonts.families.entry(FontFamily::Monospace).or_default().insert(1, "Inter".to_owned());
+    let proportional = fonts.families.entry(FontFamily::Proportional).or_default();
+    proportional.insert(0, "Montserrat".to_owned());
+    proportional.insert(1, "Inter".to_owned());
+    // Keep letters JetBrains Mono lacks (for example Bulgarian ѝ) in the app's own faces, before
+    // egui's defaults or optional system/CJK fallbacks.
+    let monospace = fonts.families.entry(FontFamily::Monospace).or_default();
+    monospace.insert(0, "JetBrainsMono".to_owned());
+    monospace.insert(1, "Montserrat".to_owned());
+    monospace.insert(2, "Inter".to_owned());
     // The same static bytes pdfcraft-fonts uses for Japanese/Chinese text in PDFs: one copy, not two.
     for face in pdfcraft_fonts::ui_cjk_fonts(prefer_hans) {
         let name = face.name();
@@ -402,8 +418,8 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
         }
     }
     let fallback: Vec<String> = fonts.families[&FontFamily::Proportional].clone();
-    for (fam, primary) in [("medium", "Inter-Medium"), ("semibold", "Inter-SemiBold")] {
-        let mut stack = vec![primary.to_owned()];
+    for (fam, primary, inter) in [("medium", "Montserrat-Medium", "Inter-Medium"), ("semibold", "Montserrat-SemiBold", "Inter-SemiBold")] {
+        let mut stack = vec![primary.to_owned(), inter.to_owned()];
         stack.extend(fallback.iter().cloned());
         fonts.families.insert(FontFamily::Name(fam.into()), stack);
     }
@@ -497,9 +513,9 @@ mod tests {
 
     fn primary_families() -> [(FontFamily, &'static str); 4] {
         [
-            (FontFamily::Proportional, "Inter"),
-            (FontFamily::Name("medium".into()), "Inter-Medium"),
-            (FontFamily::Name("semibold".into()), "Inter-SemiBold"),
+            (FontFamily::Proportional, "Montserrat"),
+            (FontFamily::Name("medium".into()), "Montserrat-Medium"),
+            (FontFamily::Name("semibold".into()), "Montserrat-SemiBold"),
             (FontFamily::Monospace, "JetBrainsMono"),
         ]
     }
@@ -652,7 +668,7 @@ mod tests {
             assert_eq!(primary_font_tweak(FontPolicyPlatform::Other, name), baseline_data.tweak, "non-Windows policy for {family:?}");
         }
         for (name, data) in &baseline.font_data {
-            if !["Inter", "Inter-Medium", "Inter-SemiBold", "JetBrainsMono"].contains(&name.as_str()) {
+            if !PRIMARY_FACES.contains(&name.as_str()) {
                 assert_eq!(windows.font_data[name].tweak, data.tweak, "Windows fallback {name}");
             }
         }

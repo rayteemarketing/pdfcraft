@@ -290,17 +290,22 @@ fn ui_fonts_work_without_craft_fonts() {
     theme::install_fonts(&ctx);
 }
 
-/// Latin- and Cyrillic-script catalogs (Czech, Brazilian Portuguese, German, Spanish, French, Russian, Bulgarian, Hungarian, Ukrainian, Italian, Slovene) are drawn entirely by the app's own faces
-/// (Inter, JetBrains Mono with Inter fallback): no letter falls through to egui's defaults or a CJK fallback. (egui's
+/// Latin-, Cyrillic- and Greek-script catalogs (Czech, Greek, Brazilian Portuguese, German, Spanish, French, Russian, Bulgarian, Hungarian, Ukrainian, Italian, Slovene…) are drawn entirely by the app's own faces
+/// (Montserrat with Inter behind it at the same weight; JetBrains Mono with Montserrat and Inter behind it): no letter falls through to egui's defaults or a CJK fallback. (egui's
 /// `has_glyphs` can't answer this: with only the primary face it is also the replacement face.)
 #[test]
 fn primary_ui_fonts_cover_latin_and_cyrillic_catalogs() {
     use skrifa::MetadataProvider as _;
     let defs = theme::font_definitions();
-    assert_eq!(&defs.families[&FontFamily::Monospace][..2], ["JetBrainsMono", "Inter"]);
-    let fallback = &defs.font_data["Inter"];
-    let fallback_font = skrifa::FontRef::from_index(&fallback.font, fallback.index).unwrap();
-    let fallback_charmap = fallback_font.charmap();
+    assert_eq!(&defs.families[&FontFamily::Proportional][..2], ["Montserrat", "Inter"]);
+    assert_eq!(&defs.families[&FontFamily::Monospace][..3], ["JetBrainsMono", "Montserrat", "Inter"]);
+    for (family, inter) in [("medium", "Inter-Medium"), ("semibold", "Inter-SemiBold")] {
+        assert_eq!(defs.families[&FontFamily::Name(family.into())][1], inter, "{family}");
+    }
+    let has = |name: &str, c: char| {
+        let data = &defs.font_data[name];
+        skrifa::FontRef::from_index(&data.font, data.index).unwrap().charmap().map(c).is_some()
+    };
     for (code, catalog) in [
         ("cs", include_str!("../src/i18n/cs.tsv")),
         ("el", include_str!("../src/i18n/el.tsv")),
@@ -325,15 +330,17 @@ fn primary_ui_fonts_cover_latin_and_cyrillic_catalogs() {
                 text.extend(translation.chars().filter(|c| !c.is_whitespace()));
             }
         }
-        for name in ["Inter", "Inter-Medium", "Inter-SemiBold", "JetBrainsMono"] {
-            let data = &defs.font_data[name];
-            let font = skrifa::FontRef::from_index(&data.font, data.index).unwrap();
-            let charmap = font.charmap();
-            let mut missing: Vec<char> =
-                text.chars().filter(|c| charmap.map(*c).is_none() && (name != "JetBrainsMono" || fallback_charmap.map(*c).is_none())).collect();
+        // Each primary face with the own faces behind it in its family.
+        for stack in [
+            ["Montserrat", "Inter"].as_slice(),
+            &["Montserrat-Medium", "Inter-Medium"],
+            &["Montserrat-SemiBold", "Inter-SemiBold"],
+            &["JetBrainsMono", "Montserrat", "Inter"],
+        ] {
+            let mut missing: Vec<char> = text.chars().filter(|c| !stack.iter().any(|name| has(name, *c))).collect();
             missing.sort_unstable();
             missing.dedup();
-            assert!(missing.is_empty(), "{code}: {name} lacks {missing:?}");
+            assert!(missing.is_empty(), "{code}: {stack:?} lack {missing:?}");
         }
     }
 }
